@@ -1,0 +1,224 @@
+<html>
+<head>
+    <title>Diep.io-like Game</title>
+</head>
+<style>
+    #myCanvas {
+        border: 2px solid #000000;
+    }
+</style>
+<body>
+<canvas id="myCanvas"></canvas>
+<script>
+    var canvas = document.getElementById("myCanvas");
+    var ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth - 20;
+    canvas.height = window.innerHeight - 20;
+
+    var score = 0; // score point
+
+    var bola = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        warna: "#00f",
+        sudut: 0,
+        jarijari: 20,
+        kecepatan: 3,
+        peluru: [],
+    };
+
+    // Peluru (tembakan)
+    function buatPeluru() {
+        return {
+            x: bola.x,
+            y: bola.y,
+            sudut: bola.sudut,
+            kecepatan: 5,
+            jarijari: 5,
+        };
+    }
+
+    // Target wandering dengan efek pop
+    let jjT = 15;
+    let jmlTarget = 10;
+    let target = [];
+    let wanderingSpeed = 1;
+
+    for (let i = 0; i < jmlTarget; i++) {
+        xTawal = Math.random() * (canvas.width - 2 * jjT) + jjT;
+        yTawal = Math.random() * (canvas.height - 2 * jjT) + jjT;
+        wTawal = "#" + ((1 << 24) * Math.random() | 0).toString(16);
+        target[i] = {
+            x: xTawal,
+            y: yTawal,
+            jarijari: jjT,
+            warna: wTawal,
+            sudut: Math.random() * 2 * Math.PI,
+            kecepatan: wanderingSpeed,
+            isHit: false,
+            hitFrame: 0,
+            maxHitFrames: 10
+        };
+    }
+
+    // Fungsi untuk update wandering target
+    function updateWandering(target) {
+        if (!target.isHit) {
+            target.x += target.kecepatan * Math.cos(target.sudut);
+            target.y += target.kecepatan * Math.sin(target.sudut);
+            if (target.x - target.jarijari < 0 || target.x + target.jarijari > canvas.width) {
+                target.sudut = Math.PI - target.sudut;
+            }
+            if (target.y - target.jarijari < 0 || target.y + target.jarijari > canvas.height) {
+                target.sudut = -target.sudut;
+            }
+            if (Math.random() < 0.01) {
+                target.sudut = Math.random() * 2 * Math.PI;
+            }
+        } else {
+            // Efek pop, target membesar sementara
+            target.hitFrame++;
+            if (target.hitFrame < target.maxHitFrames) {
+                target.jarijari += 2; // Target membesar
+            } else {
+                // Respawn target setelah efek pop selesai
+                target = Object.assign(target, posisiRespawnTidakOverlap());
+                target.isHit = false;
+                target.hitFrame = 0; // Reset animasi pop
+            }
+        }
+    }
+
+    // Fungsi untuk deteksi tumbukan
+    function cekTumbukanLingkaran(objek1, objek2) {
+        var jarakEuclidean = Math.sqrt(Math.pow((objek1.x - objek2.x), 2) + Math.pow((objek1.y - objek2.y), 2));
+        return jarakEuclidean <= (objek1.jarijari + objek2.jarijari);
+    }
+
+    // Fungsi untuk menggambar objek
+    function gambarkan() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Menggambar target dan cek tumbukan
+        for (let i = 0; i < jmlTarget; i++) {
+            updateWandering(target[i]);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(target[i].x, target[i].y, target[i].jarijari, 0, 2 * Math.PI, false);
+            ctx.closePath();
+            ctx.fillStyle = target[i].warna;
+            ctx.fill();
+            ctx.restore();
+
+            // Cek peluru mengenai target
+            for (let j = bola.peluru.length - 1; j >= 0; j--) {
+                if (cekTumbukanLingkaran(bola.peluru[j], target[i]) && !target[i].isHit) {
+                    target[i].isHit = true; // Target terkena peluru
+                    bola.peluru.splice(j, 1); // Hapus peluru
+                    score++; // Tambah poin
+                }
+            }
+        }
+
+        // Menggambar bola
+        ctx.save();
+        ctx.translate(bola.x, bola.y);
+        ctx.rotate(bola.sudut);
+
+        // Lingkaran bola
+        ctx.beginPath();
+        ctx.arc(0, 0, bola.jarijari, 0, 2 * Math.PI, false);
+        ctx.closePath();
+        ctx.fillStyle = bola.warna;
+        ctx.fill();
+
+        // Kepala segitiga
+        ctx.beginPath();
+        ctx.moveTo(0, -bola.jarijari);
+        ctx.lineTo(10, -10);
+        ctx.lineTo(-10, -10);
+        ctx.closePath();
+        ctx.fillStyle = "#ffff00";
+        ctx.fill();
+        ctx.restore();
+
+        // Menggambar peluru
+        for (let i = bola.peluru.length - 1; i >= 0; i--) {
+            let peluru = bola.peluru[i];
+            peluru.x += peluru.kecepatan * Math.cos(peluru.sudut);
+            peluru.y += peluru.kecepatan * Math.sin(peluru.sudut);
+
+            ctx.beginPath();
+            ctx.arc(peluru.x, peluru.y, peluru.jarijari, 0, 2 * Math.PI, false);
+            ctx.fillStyle = "#FF0000";
+            ctx.fill();
+            ctx.closePath();
+
+            if (peluru.x < 0 || peluru.x > canvas.width || peluru.y < 0 || peluru.y > canvas.height) {
+                bola.peluru.splice(i, 1); // Hapus peluru jika keluar layar
+            }
+        }
+
+        // Tampilkan skor
+        ctx.fillStyle = "#000";
+        ctx.font = "20px Arial";
+        ctx.fillText("Score: " + score, 20, 30);
+    }
+
+    // Posisi respawn tanpa overlap
+    function posisiRespawnTidakOverlap() {
+        let newTarget, overlap;
+        do {
+            newTarget = {
+                x: Math.random() * (canvas.width - 2 * jjT) + jjT,
+                y: Math.random() * (canvas.height - 2 * jjT) + jjT,
+                jarijari: jjT,
+                warna: "#" + ((1 << 24) * Math.random() | 0).toString(16),
+            };
+            overlap = target.some(t => cekTumbukanLingkaran(t, newTarget));
+        } while (overlap);
+        return newTarget;
+    }
+
+    // Deteksi keyboard
+    var yangDipencet = {};
+    window.addEventListener("keydown", (e) => yangDipencet[e.keyCode] = true);
+    window.addEventListener("keyup", (e) => delete yangDipencet[e.keyCode]);
+
+    // Menembakkan peluru dengan spasi
+    window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+            bola.peluru.push(buatPeluru());
+        }
+    });
+
+    // Update pergerakan bola dan rotasi
+    function updateBolaMovement() {
+        if (yangDipencet[87]) { // W key (maju)
+            bola.x += bola.kecepatan * Math.cos(bola.sudut);
+            bola.y += bola.kecepatan * Math.sin(bola.sudut);
+        }
+        if (yangDipencet[83]) { // S key (mundur)
+            bola.x -= bola.kecepatan * Math.cos(bola.sudut);
+            bola.y -= bola.kecepatan * Math.sin(bola.sudut);
+        }
+        if (yangDipencet[65]) { // A key (rotasi ke kiri)
+            bola.sudut -= 0.05; 
+        }
+        if (yangDipencet[68]) { // D key (rotasi ke kanan)
+            bola.sudut += 0.05; 
+        }
+    }
+
+    // Loop utama
+    function mainLoop() {
+        updateBolaMovement();
+        gambarkan();
+        requestAnimationFrame(mainLoop);
+    }
+
+    mainLoop();
+</script>
+</body>
+</html>
